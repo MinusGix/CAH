@@ -55,8 +55,8 @@ game.players.forEach(player => {
 
 
 console.log(game.state);
-console.log(game.getFilledInCards());
+console.log(game.getFilledInCardText());
 
-let chosen = CAH.randomIndex(game.getFilledInCards().length);
+let chosen = CAH.randomIndex(game.getFilledInCardText().length);
 
 game.chooseWinnerByIndex(game.tsar, chosen);

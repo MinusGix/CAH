@@ -241,8 +241,28 @@ class Game extends FSM {
 		let choice : [Player, string] = choices[index];
 
 		choice[0].points++;
+
+		this.checkWinner();
 		
 		return [true];
+	}
+
+	checkWinner () : void {
+		let winners = this.getWinners();
+
+		if (winners.length > 1) {
+			console.warn("[CAH] There was more than one winner at once, which is odd. Was max points somehow changed during play?");
+		}
+
+		// TODO: emit that there's been a winner and move to endgame
+	}
+
+	getWinners () : Player[] {
+		return this.players.filter(player => this.isWinner(player));
+	}
+
+	isWinner (player : Player) : boolean {
+		return player.points === this.settings.maxPoints;
 	}
 
 	donePlaying () : boolean {
@@ -266,12 +286,10 @@ class Game extends FSM {
 	getFilledInCardsWithPlayer () : Array<[Player, string]> {
 		return this.players
 			.filter(player => !this.isTsar(player))
-			.map((player : Player) : [Player, string] => 
-					[
+			.map((player : Player) : [Player, string] => [
 						player, 
 						this.blackCard.getDisplay(true, ...player.played.map(index => player.cards[index]))
-					]
-			);
+					]);
 	}
 
 	play (player : Player, card : WhiteCard) : Info {
@@ -675,4 +693,6 @@ module.exports = {
 	BlackCard,
 
 	CardCollection,
+
+	randomIndex
 };
