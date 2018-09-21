@@ -175,6 +175,7 @@ class Game extends FSM {
 	blackCard : BlackCard;
 
 	settings: GameSettings;
+	minSettings: GameSettings;
 
 	constructor () {
 		super();
@@ -190,6 +191,12 @@ class Game extends FSM {
 			maxCards: 10, // Maximum amount of cards in a players hand
 			maxPoints: 10, // The number of points to meet to win
 			maxPlayers: 6,
+		};
+
+		this.minSettings = {
+			maxCards: 3,
+			maxPoints: 1,
+			maxPlayers: 3,
 		};
 
 		// The state for the game being killed off
