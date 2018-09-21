@@ -171,6 +171,7 @@ class Game extends FSM {
 	settings: {
 		maxCards: number;
 		maxPoints: number;
+		maxPlayers: number;
 	};
 
 	constructor () {
@@ -186,6 +187,7 @@ class Game extends FSM {
 		this.settings = {
 			maxCards: 10, // Maximum amount of cards in a players hand
 			maxPoints: 10, // The number of points to meet to win
+			maxPlayers: 6,
 		};
 
 		// The state for the game being killed off
@@ -378,8 +380,11 @@ class Game extends FSM {
 	}
 
 	// Add a new player
-	addPlayer (player : Player) : void {
-		// TODO: add a player limit
+	addPlayer (player : Player) : Info {
+		if (this.players.length >= this.settings.maxPlayers) {
+			return [false, "There is already too many players."];
+		}
+
 		this.players.push(player);
 
 		this.findHost();
@@ -392,6 +397,8 @@ class Game extends FSM {
 		if (this.state !== 'WAITING' && this.state !== 'EMPTY') { // basically if the game is playing
 			this.players[this.players.length - 1].fillCards(this.settings.maxCards, this.cards);
 		}
+
+		return [true];
 	}
 
 	// Remove a player by reference
