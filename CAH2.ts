@@ -161,7 +161,7 @@ class FSM { // FiniteStateMachine - May not be completely true to the idea (as I
 }
 
 interface GameSettings<T> {
-	maxCards: T;
+	playerCards: T;
 	maxPoints: T;
 	maxPlayers: T;
 }
