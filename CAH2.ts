@@ -160,10 +160,10 @@ class FSM { // FiniteStateMachine - May not be completely true to the idea (as I
 	}
 }
 
-interface GameSettings {
-	maxCards: number;
-	maxPoints: number;
-	maxPlayers: number;
+interface GameSettings<T> {
+	maxCards: T;
+	maxPoints: T;
+	maxPlayers: T;
 }
 
 class Game extends FSM {
@@ -174,8 +174,8 @@ class Game extends FSM {
 	cards : CardCollection;
 	blackCard : BlackCard;
 
-	settings: GameSettings;
-	minSettings: GameSettings;
+	settings: GameSettings<number>;
+	minSettings: GameSettings<number>;
 
 	constructor () {
 		super();
