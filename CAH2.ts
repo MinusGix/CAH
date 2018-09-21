@@ -47,13 +47,15 @@ interface FSM_TriggerCallback_From extends FSM_TriggerCallback_General {
 
 interface FSM_TriggerCallback_To extends FSM_TriggerCallback_General {} // no difference
 
-class FSM { // FiniteStateMachine - May not be completely true to the idea (as I haven't actually had to use a fsm before), but it's got states at least!
+class FSM extends EventEmitter { // FiniteStateMachine - May not be completely true to the idea (as I haven't actually had to use a fsm before), but it's got states at least!
 	states: {
 		[propName: string]: State
 	};
 	state: string;
 
 	constructor () {
+		super();
+		
 		// [string]: state
 		this.states = {};
 		// current state's name.
