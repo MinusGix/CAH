@@ -174,6 +174,8 @@ class Game extends FSM {
 	cards : CardCollection;
 	blackCard : BlackCard;
 
+	settingsInfo: GameSettings<string>;
+
 	maxSettings: GameSettings<number>;
 	settings: GameSettings<number>;
 	minSettings: GameSettings<number>;
@@ -187,6 +189,12 @@ class Game extends FSM {
 
 		this.cards = new CardCollection();
 		this.blackCard = null;
+
+		this.settingsInfo = {
+			playerCards: "The amount of cards a player can have in their hand. Their hand is filled up to this much at the beginning of every turn.",
+			winPoints: "The amount of points needed to be a winner of the game.",
+			gamePlayerCount: "The amount of players allowed in the game.",
+		};
 
 		this.maxSettings = {
 			playerCards: 20,
