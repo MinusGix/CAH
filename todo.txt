@@ -1,7 +1,3 @@
 Need to add inactive player support
 Need to add so turns end after a certain period of time
 Let host customize settings, and disable some while the game is running.
-	- Max Cards Min of 2 max of 20 (don't want to get ratelimited). Default 10
-	- Turn Timer - The amount of time before a turn is forced to end. Default 1 min? Unchangeable upon playing.
-	- Max Players - The max amount of players. Default 6. Min 3. Max 10.
-	- Max Points - The max amount points before a winner is introduced. Unchangeable upon Playing.
