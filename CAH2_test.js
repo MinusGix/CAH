@@ -13,7 +13,7 @@ let col1 = CAH.CardCollection.create({
 		"Oreo",
 		"Communism For All"
 	]
-})
+});
 
 let P1 = new CAH.Player('Player1');
 let P2 = new CAH.Player('Player2');
@@ -22,32 +22,46 @@ let P3 = new CAH.Player('Player3');
 let game = CAH.Game.create(P1);
 game.cards.merge(col1);
 
+game.on("game:player:played-all-cards", (_, player) => {
+	console.log(player.id + " has played all their cards.");
+})
+
+game.on("game:game-winner", (_, winners) => {
+	let text = winners.join(', ');
+
+	if (winners.length !== 1) {
+		text = "The winners are: " + text;
+	} else {
+		text = "The winner is: " + text;
+	}
+
+	console.log(text + "!");
+});
+
+game.on("game:tsar:choice", (_, choice) => {
+	console.log("The Tsar chose '" + choice[1] + "' which was played by " + choice[0].id + "! They got a point.");
+})
+
+
 game.addPlayer(P2);
 game.addPlayer(P3);
 
 game.start();
 
-console.log(game.toString());
-
 game.removePlayer(P2);
-
-console.log(game.toString());
 
 let P4 = new CAH.Player('Player4');
 
 game.addPlayer(P4);
 game.start();
 
-console.log(game.toString());
-
-console.log(game.blackCard.toString());
+console.log("Black Card is: ", game.blackCard.toString());
 
 game.players.forEach(player => {
 	if (!game.isTsar(player)) {
 		for (let i = 0; i < game.blackCard.getFillCount(); i++) {
 			game.play(player, player.cards[i]);
 		}
-		console.log(player.id, "played cards.");
 	} else {
 		console.log(player.id, "is tsar");
 	}

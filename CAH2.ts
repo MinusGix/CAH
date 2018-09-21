@@ -55,7 +55,7 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 
 	constructor () {
 		super();
-		
+
 		// [string]: state
 		this.states = {};
 		// current state's name.
@@ -73,6 +73,9 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 	setState (name : string, forceFrom : boolean = false, forceTo : boolean = false) : boolean {
 		if (!this.findState(name)) {
 			console.warn("Can't find state with name of:", name);
+
+			this.emit("setState:non-exist-state", this, name);
+
 			return false;
 		}
 
@@ -88,6 +91,8 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 					return prev;
 				}, true);
 
+			this.emit("setState:from", this, name, stateAllows);
+			
 			if (!stateAllows) {
 				return false; // Sorry, the current state is maintaining its dictatorial control and not letting `name` take over.
 			}
@@ -103,6 +108,8 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 				return prev;
 			}, true);
 		
+		this.emit("setState:to", this, name, futureState);
+		
 		if (!forceFrom && !futureState) {
 			return false;
 		}
@@ -110,6 +117,7 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 		// if there is an actual state
 		if (this.state) {
 			this.trigger(this.state, 'unset', name);
+			this.emit("state:leaving", this, this.state, name);
 		}
 
 		// for passing to trigger
@@ -118,13 +126,13 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 		this.state = name;
 
 		this.trigger(this.state, 'set', tempLastState);
+
+		this.emit("state:entering", this, this.state, tempLastState);
 		
 		return true;
 	}
 
 	trigger (stateName : string, transformName : string, ...args) : boolean[] {
-		console.log('--- trigger ', stateName, transformName, args);
-
 		return this.findState(stateName)[transformName].map((func : FSM_TriggerCallback_General) => func(this, stateName, transformName, ...args));
 	}
 
@@ -139,6 +147,8 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 			set: [], // Functions to run whenever this is set to be the current state
 			unset: [], // Functions to run whenever this is set to be the current state
 		};
+
+		this.emit("state:created", this, name);
 
 		return this;
 	}
@@ -247,7 +257,6 @@ class Game extends FSM {
 			.setToTransform("DEALING", () => this.state === "WAITING" || this.state === "PLAYING" || this.state === "INBETWEENTURN" || this.state === "TSARTURN")
 			.setTransform("set", "DEALING", () => {
 				// give players cards
-				console.log('--- dealing cards');
 				this.tsar = this.players[randomIndex(this.players.length)];
 				this.players.forEach(player => player.fillCards(this.settings.playerCards, this.cards));
 				this.blackCard = this.cards.getRandomBlackCard(true);
@@ -267,6 +276,8 @@ class Game extends FSM {
 		this.addState("TSARTURN")
 			.setToTransform("TSARTURN", () => this.state === "INBETWEENTURN")
 			.setFromTransform("TSARTURN", (_, __, ___, to) => to === "DEALING");	
+
+		this.addState("ENDGAME");
 	}
 
 	isTsar (player : Player) : boolean {
@@ -295,6 +306,8 @@ class Game extends FSM {
 		// They got chosen by the tsar, so increase it by a point
 		choice[0].points++;
 
+		this.emit("game:tsar:choice", this, choice);
+
 		// Check if there is a winner
 		this.checkWinner();
 		
@@ -309,6 +322,13 @@ class Game extends FSM {
 			console.warn("[CAH] There was more than one winner at once, which is odd. Was max points somehow changed during play?");
 		}
 
+		if (winners.length === 0) {
+			return;
+		}
+
+		this.setState("ENDGAME", true, true);
+
+		this.emit("game:game-winner", this, winners);
 		// TODO: emit that there's been a winner and move to endgame
 	}
 
@@ -385,6 +405,10 @@ class Game extends FSM {
 			this.setState('TSARTURN');
 		}
 
+		if (player.played.length === this.blackCard.getFillCount()) {
+			this.emit("game:player:played-all-cards", this, player);
+		}
+
 		return [true];
 	}
 
@@ -399,8 +423,8 @@ class Game extends FSM {
 			return [false, "The game is not currently waiting to be started."];
 		}
 
-		console.log("SET TO DEALING: ", this.setState("DEALING"));
-		console.log("SET TO PLAYING: ", this.setState("PLAYING"));
+		this.setState("DEALING");
+		this.setState("PLAYING");
 
 		return [true];
 	}
@@ -534,8 +558,6 @@ class Player {
 	fillCards (playerCards : number = 10, col : CardCollection) : boolean {
 		// The amount of cards that needs to be added
 		let difference : number = playerCards - this.cards.length;
-		
-		console.log('--- Player ' + this.id + ' was missing ' + String(difference) + ' cards.');
 
 		for (let i = 0; i < difference; i++) {
 			this.cards.push(col.getRandomWhiteCard(true));
