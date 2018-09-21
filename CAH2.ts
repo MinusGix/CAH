@@ -162,8 +162,8 @@ class FSM { // FiniteStateMachine - May not be completely true to the idea (as I
 
 interface GameSettings<T> {
 	playerCards: T;
-	maxPoints: T;
-	maxPlayers: T;
+	winPoints: T;
+	gamePlayerCount: T;
 }
 
 class Game extends FSM {
@@ -188,15 +188,15 @@ class Game extends FSM {
 		this.blackCard = null;
 
 		this.settings = {
-			maxCards: 10, // Maximum amount of cards in a players hand
-			maxPoints: 10, // The number of points to meet to win
-			maxPlayers: 6,
+			playerCards: 10, // Maximum amount of cards in a players hand
+			winPoints: 10, // The number of points to meet to win
+			gamePlayerCount: 6,
 		};
 
 		this.minSettings = {
-			maxCards: 3,
-			maxPoints: 1,
-			maxPlayers: 3,
+			playerCards: 3,
+			winPoints: 1,
+			gamePlayerCount: 3,
 		};
 
 		// The state for the game being killed off
@@ -232,7 +232,7 @@ class Game extends FSM {
 				// give players cards
 				console.log('--- dealing cards');
 				this.tsar = this.players[randomIndex(this.players.length)];
-				this.players.forEach(player => player.fillCards(this.settings.maxCards, this.cards));
+				this.players.forEach(player => player.fillCards(this.settings.playerCards, this.cards));
 				this.blackCard = this.cards.getRandomBlackCard(true);
 			});
 		
@@ -301,7 +301,7 @@ class Game extends FSM {
 	}
 
 	isWinner (player : Player) : boolean {
-		return player.points === this.settings.maxPoints;
+		return player.points === this.settings.winPoints;
 	}
 
 	// If all the players have played all of their cards. TODO: add a timer to this, or somewhere in the code so there's a turn limit
@@ -390,7 +390,7 @@ class Game extends FSM {
 
 	// Add a new player
 	addPlayer (player : Player) : Info {
-		if (this.players.length >= this.settings.maxPlayers) {
+		if (this.players.length >= this.settings.gamePlayerCount) {
 			return [false, "There is already too many players."];
 		}
 
@@ -404,7 +404,7 @@ class Game extends FSM {
 
 		// TODO: make this check for specific states where people are allowed to join
 		if (this.state !== 'WAITING' && this.state !== 'EMPTY') { // basically if the game is playing
-			this.players[this.players.length - 1].fillCards(this.settings.maxCards, this.cards);
+			this.players[this.players.length - 1].fillCards(this.settings.playerCards, this.cards);
 		}
 
 		return [true];
@@ -514,9 +514,9 @@ class Player {
 	}
 
 	// Fills the players deck with cards randomly chosen from the games deck. TODO: handle cases where there is no cards, somewhere
-	fillCards (maxCards : number = 10, col : CardCollection) : boolean {
+	fillCards (playerCards : number = 10, col : CardCollection) : boolean {
 		// The amount of cards that needs to be added
-		let difference : number = maxCards - this.cards.length;
+		let difference : number = playerCards - this.cards.length;
 		
 		console.log('--- Player ' + this.id + ' was missing ' + String(difference) + ' cards.');
 
