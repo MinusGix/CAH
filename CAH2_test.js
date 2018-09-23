@@ -27,7 +27,7 @@ game.on("game:player:played-all-cards", (_, player) => {
 })
 
 game.on("game:game-winner", (_, winners) => {
-	let text = winners.join(', ');
+	let text = winners.map(player => player.id).join(', ');
 
 	if (winners.length !== 1) {
 		text = "The winners are: " + text;
@@ -40,7 +40,7 @@ game.on("game:game-winner", (_, winners) => {
 
 game.on("game:tsar:choice", (_, choice) => {
 	console.log("The Tsar chose '" + choice[1] + "' which was played by " + choice[0].id + "! They got a point.");
-})
+});
 
 
 game.addPlayer(P2);
@@ -55,22 +55,34 @@ let P4 = new CAH.Player('Player4');
 game.addPlayer(P4);
 game.start();
 
-console.log("Black Card is: ", game.blackCard.toString());
-
-game.players.forEach(player => {
-	if (!game.isTsar(player)) {
-		for (let i = 0; i < game.blackCard.getFillCount(); i++) {
-			game.play(player, player.cards[i]);
-		}
-	} else {
-		console.log(player.id, "is tsar");
+function playTurn () {
+	if (game.state === 'ENDGAME') {
+		return false;
 	}
-});
+
+	console.log("Black Card is: ", game.blackCard.toString());
+
+	game.players.forEach(player => {
+		if (!game.isTsar(player)) {
+			for (let i = 0; i < game.blackCard.getFillCount(); i++) {
+				game.play(player, player.cards[i]);
+			}
+		} else {
+			console.log(player.id, "is tsar");
+		}
+	});
 
 
-console.log(game.state);
-console.log(game.getFilledInCardText());
+	console.log(game.state);
+	console.log(game.getFilledInCardText());
 
-let chosen = CAH.randomIndex(game.getFilledInCardText().length);
+	let chosen = CAH.randomIndex(game.getFilledInCardText().length);
 
-game.chooseWinnerByIndex(game.tsar, chosen);
+	game.chooseTurnWinnerByIndex(game.tsar, chosen);
+
+	console.log(game.players.map(player => player.id + ' ' + player.points).join(', '));
+
+	return true;
+}
+
+while(playTurn()) {}

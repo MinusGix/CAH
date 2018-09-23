@@ -2,6 +2,41 @@
 
 const EventEmitter = require('events');
 
+interface MainConfiguration {
+	Game: {
+		settingsInfo: GameSettings<string>;
+		maxSettings: GameSettings<number>;
+		defaultSettings: GameSettings<number>;
+		minSettings: GameSettings<number>;
+	}
+}
+
+// Global Settings
+let InternalConfig : MainConfiguration = {
+	Game: {
+		settingsInfo: {
+			playerCards: "The amount of cards a player can have in their hand. Their hand is filled up to this much at the beginning of every turn.",
+			winPoints: "The amount of points needed to be a winner of the game.",
+			gamePlayerCount: "The amount of players allowed in the game.",
+		},
+		maxSettings: {
+			playerCards: 20, // Too many cards and it can take too long to even find the right cards to play, or it would be too easy.
+			winPoints: 30, // Too much and the game would just go on forever.
+			gamePlayerCount: 10, // Depends on what this is being used in.
+		},
+		defaultSettings: {
+			playerCards: 10, // Maximum amount of cards in a players hand
+			winPoints: 10, // The number of points to meet to win
+			gamePlayerCount: 6, // The maximum amount of players allowed in the game. This can depend on what you're using this in. (Such as in a chat that has spam limiting, too many players could make the bot get caught by that)
+		},
+		minSettings: {
+			playerCards: 3, // Many cards require 1 or 2 or 3 cards. There are ones that require more, but they're rarer. So 3 is reccomended amount
+			winPoints: 1, // This should be at least 1, or weird things will happen. Since this is the minimum the points required to win is allowed to be set too
+			gamePlayerCount: 3, // If you just had one player, then there's no one to play cards. Just two players is possible but boring.
+		},
+	}
+};
+
 // Indent it for printing to the console. The debugging output is likely to be reworked completely.
 function indent (arr: string[], indentLevel: number = 0, char: string = '\t') : string {
 	const str = char.repeat(indentLevel);
@@ -12,6 +47,11 @@ function indent (arr: string[], indentLevel: number = 0, char: string = '\t') : 
 // Gets a random index from a length. Array isn't given, but rather just a length.
 function randomIndex (length: number) : number {
 	return Math.floor(Math.random() * length);
+}
+
+// Copy the object. Shallow.
+function simpleCopy<T>(obj: T) : T {
+	return Object.assign({}, obj);
 }
 
 // a State as used internally by the FSM class
@@ -202,42 +242,23 @@ class Game extends FSM {
 		this.cards = new CardCollection();
 		this.blackCard = null;
 
-		this.settingsInfo = {
-			playerCards: "The amount of cards a player can have in their hand. Their hand is filled up to this much at the beginning of every turn.",
-			winPoints: "The amount of points needed to be a winner of the game.",
-			gamePlayerCount: "The amount of players allowed in the game.",
-		};
+		this.settingsInfo = simpleCopy(InternalConfig.Game.settingsInfo);
 
-		this.maxSettings = {
-			playerCards: 20,
-			winPoints: 30,
-			gamePlayerCount: 10,
-		};
+		this.maxSettings = simpleCopy(InternalConfig.Game.maxSettings);
 
-		this.settings = {
-			playerCards: 10, // Maximum amount of cards in a players hand
-			winPoints: 10, // The number of points to meet to win
-			gamePlayerCount: 6,
-		};
+		this.settings = simpleCopy(InternalConfig.Game.defaultSettings);
 
-		this.minSettings = {
-			playerCards: 3,
-			winPoints: 1,
-			gamePlayerCount: 3,
-		};
+		this.minSettings = simpleCopy(InternalConfig.Game.minSettings);
 
 		// The state for the game being killed off
 		this.addState("KILLED") // in the other fromTransform functions, no need to check for KILLED as it is forced onto the system.
 			.setToTransform("KILLED", () => this.players.length === 0) // what
 			.setFromTransform("KILLED", () => false) // can't change from being killed
 			.setTransform("set", "KILLED", () => {
-				this.host = null;
-				this.tsar = null;
-				this.players = null;
-				this.cards = null;
+				this.host = this.tsar = this.players = this.cards = this.blackCard = this.settingsInfo = this.maxSettings = this.settings = this.minSettings = null;
 			})
 			.setTransform("unset", "KILLED", () => {
-				throw new Error("Attempting to convert killed game object into non-killed game object, apparently. Bugger off.");
+				throw new Error("Attempting to convert killed game object into non-killed game object, apparently.");
 			});
 		
 		// Before even the host has joined
@@ -257,9 +278,20 @@ class Game extends FSM {
 			.setToTransform("DEALING", () => this.state === "WAITING" || this.state === "PLAYING" || this.state === "INBETWEENTURN" || this.state === "TSARTURN")
 			.setTransform("set", "DEALING", () => {
 				// give players cards
+				this.players.forEach(player => {
+					if (player.played.length > 0) { // remove played cards
+						player.played.forEach(index => player.cards[index] = null);
+						player.cards = player.cards.filter(card => card !== null);
+
+						player.played = [];
+					}
+
+					player.fillCards(this.settings.playerCards, this.cards);
+				});
 				this.tsar = this.players[randomIndex(this.players.length)];
-				this.players.forEach(player => player.fillCards(this.settings.playerCards, this.cards));
 				this.blackCard = this.cards.getRandomBlackCard(true);
+
+				this.setState("PLAYING");
 			});
 		
 		//  Players can play their cards during this turn.
@@ -277,7 +309,9 @@ class Game extends FSM {
 			.setToTransform("TSARTURN", () => this.state === "INBETWEENTURN")
 			.setFromTransform("TSARTURN", (_, __, ___, to) => to === "DEALING");	
 
-		this.addState("ENDGAME");
+		this.addState("ENDGAME")
+			.setToTransform("ENDGAME", () => this.state === "TSARTURN")
+			.setFromTransform("ENDGAME", () => false);
 	}
 
 	isTsar (player : Player) : boolean {
@@ -285,7 +319,7 @@ class Game extends FSM {
 	}
 
 	// The Tsar chooses the winner of *that round* by their index (on the black card choice list). TODO: change the name of this so it's not confusing winner of round and winner of game
-	chooseWinnerByIndex (tsar : Player, index : number = -1) : Info {
+	chooseTurnWinnerByIndex (tsar : Player, index : number = -1) : Info {
 		if (this.tsar !== tsar) {
 			return [false, "You can't choose, you're not the Tsar."];
 		}
@@ -309,13 +343,15 @@ class Game extends FSM {
 		this.emit("game:tsar:choice", this, choice);
 
 		// Check if there is a winner
-		this.checkWinner();
+		if(!this.checkWinner()) { // if there is no winner, then advance to the next turn
+			this.setState("DEALING");
+		}
 		
 		return [true];
 	}
 
 	// Check if there is a winner of the entire game
-	checkWinner () : void {
+	checkWinner () : boolean {
 		let winners = this.getWinners();
 
 		if (winners.length > 1) {
@@ -323,13 +359,14 @@ class Game extends FSM {
 		}
 
 		if (winners.length === 0) {
-			return;
+			return false;
 		}
 
 		this.setState("ENDGAME", true, true);
 
 		this.emit("game:game-winner", this, winners);
-		// TODO: emit that there's been a winner and move to endgame
+
+		return true;
 	}
 
 	// Get all the players that meet the point requirement
@@ -424,7 +461,6 @@ class Game extends FSM {
 		}
 
 		this.setState("DEALING");
-		this.setState("PLAYING");
 
 		return [true];
 	}
