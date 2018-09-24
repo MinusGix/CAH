@@ -54,12 +54,24 @@ function simpleCopy<T>(obj: T) : T {
 	return Object.assign({}, obj);
 }
 
+// only returns true if all of the booleans in the array are true
+function combineBooleans (arr: boolean[]) {
+	return arr.reduce((prev : boolean, cur: boolean) : boolean => {
+		// Ignore anything that isn't a boolean. This lets functions return void
+		if (typeof(cur) === 'boolean') {
+			return prev && cur;
+		}
+
+		return prev;
+	}, true);
+}
+
 // a State as used internally by the FSM class
 interface State {
-	to: Function[],
-	from: Function[],
-	set: Function[],
-	unset: Function[]
+	to: FSM_TriggerCallback_To[],
+	from: FSM_TriggerCallback_From[],
+	set: FSM_TriggerCallback_Set[],
+	unset: FSM_TriggerCallback_UnSet[]
 }
 
 type Info = [boolean, string?]; // for returning if it succeeded and suggested text to send
@@ -72,7 +84,7 @@ interface StoredCards {
 	black: BlackCardData[];
 	white: WhiteCardData[];
 
-	name: string;
+	name?: string;
 }
 
 // Why. I couldn't find an easy way to do this with replication. This doesn't have special funcs for set and unset as they don't get any extra parems
@@ -86,6 +98,14 @@ interface FSM_TriggerCallback_From extends FSM_TriggerCallback_General {
 }
 
 interface FSM_TriggerCallback_To extends FSM_TriggerCallback_General {} // no difference
+
+interface FSM_TriggerCallback_Set extends FSM_TriggerCallback_General {
+	(self: FSM, stateName: string, transformName: string, lastState: string, ...args: any[]) : any;
+}
+
+interface FSM_TriggerCallback_UnSet extends FSM_TriggerCallback_General {
+	(self: FSM, stateName: string, transformName: string, to: string, ...args: any[]) : any;
+}
 
 class FSM extends EventEmitter { // FiniteStateMachine - May not be completely true to the idea (as I haven't actually had to use a fsm before), but it's got states at least!
 	states: {
@@ -107,11 +127,15 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 		this.setState('INIT'); // default to INIT state
 	}
 
+	hasState (name) {
+		return !!this.findState(name);
+	}
+
 	// Set the current state to `name`. 
 	// `forceFrom` makes so the previous state doesn't get an option to refuse the transition. (Good for things like a state where the FSM has been KILLED (as in the Game class))
 	// `forceTo` makes so the state you're trying to set to doesn't get an option to refuse the transition. 
 	setState (name : string, forceFrom : boolean = false, forceTo : boolean = false) : boolean {
-		if (!this.findState(name)) {
+		if (!this.hasState(name)) {
 			console.warn("Can't find state with name of:", name);
 
 			this.emit("setState:non-exist-state", this, name);
@@ -121,15 +145,7 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 
 		if (this.state && !forceFrom) { // if the state actually exists and we aren't ignoring it's `from` conditions
 			// in it's own variable because putting a multi-line reduce into a single if statement is messy
-			const stateAllows : boolean = this.trigger(this.state, 'from', name)
-				.reduce((prev : boolean, cur : boolean) : boolean => { // if any of the previous state conditions disagrees on moving it, then don't move it
-					// Ignore anything that isn't a boolean. This lets functions return void
-					if (typeof(cur) === 'boolean') {
-						return prev && cur;
-					}
-
-					return prev;
-				}, true);
+			const stateAllows : boolean = combineBooleans(this.trigger(this.state, 'from', name))
 
 			this.emit("setState:from", this, name, stateAllows);
 			
@@ -139,14 +155,7 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 		}
 
 		// Whether the future state is fine with the transition
-		const futureState : boolean = this.trigger(name, 'to')
-			.reduce((prev : boolean, cur : boolean) : boolean => {
-				if (typeof(cur) === 'boolean') {
-					return prev && cur;
-				}
-
-				return prev;
-			}, true);
+		const futureState : boolean = combineBooleans(this.trigger(name, 'to'))
 		
 		this.emit("setState:to", this, name, futureState);
 		
@@ -161,12 +170,11 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 		}
 
 		// for passing to trigger
-		let tempLastState : string = this.state;
+		const tempLastState : string = this.state;
 
 		this.state = name;
 
 		this.trigger(this.state, 'set', tempLastState);
-
 		this.emit("state:entering", this, this.state, tempLastState);
 		
 		return true;
@@ -177,7 +185,7 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 	}
 
 	addState (name : string) : this {
-		if (this.findState(name)) {
+		if (this.hasState(name)) {
 			throw new Error("Already created that state");
 		}
 		
@@ -199,6 +207,14 @@ class FSM extends EventEmitter { // FiniteStateMachine - May not be completely t
 
 	setFromTransform (name : string, condition : FSM_TriggerCallback_From) {
 		return this.setTransform("from", name, condition);
+	}
+
+	setSetTransform (name : string, condition) { // what a wonderful name
+		return this.setTransform("set", name, condition);
+	}
+
+	setUnSetTransform (name: string, condition) {
+		return this.setTransform("unset", name, condition);
 	}
 
 	setTransform (transformName : string, name : string, condition : FSM_TriggerCallback_General) {
@@ -242,33 +258,27 @@ class Game extends FSM {
 		this.cards = new CardCollection();
 		this.blackCard = null;
 
-		this.settingsInfo = simpleCopy(InternalConfig.Game.settingsInfo);
-
-		this.maxSettings = simpleCopy(InternalConfig.Game.maxSettings);
-
-		this.settings = simpleCopy(InternalConfig.Game.defaultSettings);
-
-		this.minSettings = simpleCopy(InternalConfig.Game.minSettings);
+		this.resetSettings();
 
 		// The state for the game being killed off
 		this.addState("KILLED") // in the other fromTransform functions, no need to check for KILLED as it is forced onto the system.
 			.setToTransform("KILLED", () => this.players.length === 0) // what
 			.setFromTransform("KILLED", () => false) // can't change from being killed
-			.setTransform("set", "KILLED", () => {
+			.setSetTransform("KILLED", () => {
 				this.host = this.tsar = this.players = this.cards = this.blackCard = this.settingsInfo = this.maxSettings = this.settings = this.minSettings = null;
 			})
-			.setTransform("unset", "KILLED", () => {
+			.setUnSetTransform("KILLED", () => {
 				throw new Error("Attempting to convert killed game object into non-killed game object, apparently.");
 			});
 		
 		// Before even the host has joined
 		this.addState("EMPTY")
-			.setFromTransform("EMPTY", (_, __, ___, to) => {to === "WAITING"});
+			.setFromTransform("EMPTY", (_, __, ___, to) => to === "WAITING");
 		
 		// There's less than minimum players
 		this.addState("WAITING")
 			.setToTransform("WAITING", () => this.players.length >= 1)
-			.setTransform("set", "WAITING", () => {
+			.setSetTransform("WAITING", () => {
 				this.players.forEach(player => player.cards = []); // clear each players cards. Only has an effect if they were playing the game then ran out of players
 				// might not be needed. should test to see if it the game runs without bugs with this removed
 			})
@@ -276,21 +286,12 @@ class Game extends FSM {
 		// The players cards are dealed and the tsar is chosen. Switched to PLAYING once it's done.
 		this.addState("DEALING") // a mid-state between WAITING & PlAYING and PLAYING & INBETWEENTURN & TSARTURN
 			.setToTransform("DEALING", () => this.state === "WAITING" || this.state === "PLAYING" || this.state === "INBETWEENTURN" || this.state === "TSARTURN")
-			.setTransform("set", "DEALING", () => {
+			.setSetTransform("DEALING", () => {
 				// give players cards
-				this.players.forEach(player => {
-					if (player.played.length > 0) { // remove played cards
-						player.played.forEach(index => player.cards[index] = null);
-						player.cards = player.cards.filter(card => card !== null);
-
-						player.played = [];
-					}
-
-					player.fillCards(this.settings.playerCards, this.cards);
-				});
-				this.tsar = this.players[randomIndex(this.players.length)];
-				this.blackCard = this.cards.getRandomBlackCard(true);
-
+				this.removePlayersPlayedCards();
+				this.fillAllPlayersCards();
+				this.chooseTsar();
+				this.chooseBlackCard();
 				this.setState("PLAYING");
 			});
 		
@@ -314,13 +315,66 @@ class Game extends FSM {
 			.setFromTransform("ENDGAME", () => false);
 	}
 
+	resetSettings () : boolean {
+		this.settingsInfo = simpleCopy(InternalConfig.Game.settingsInfo);
+
+		this.maxSettings = simpleCopy(InternalConfig.Game.maxSettings);
+
+		this.settings = simpleCopy(InternalConfig.Game.defaultSettings);
+
+		this.minSettings = simpleCopy(InternalConfig.Game.minSettings);
+
+		return true;
+	}
+
+	chooseBlackCard () : boolean {
+		this.blackCard = this.cards.getRandomBlackCard(true);
+		
+		return true;
+	}
+
+	chooseTsar () : boolean {
+		this.tsar = this.players[randomIndex(this.players.length)];
+
+		return true;
+	}
+
+	fillAllPlayersCards () : boolean[] {
+		return this.players.map(player => this.fillPlayersCards(player));
+	}
+
+	fillPlayersCards (player : Player) : boolean {
+		return player.fillCards(this.settings.playerCards, this.cards);
+	}
+
+	removePlayersPlayedCards () : boolean[] {
+		return this.players.map(player => this.removePlayerPlayedCards(player));
+	}
+
+	removePlayerPlayedCards (player: Player) : boolean {
+		if (player.played.length > 0) {
+			player.played.forEach(index => player.cards[index] = null);
+			player.cards = player.cards.filter(card => card !== null);
+			
+			player.played = [];
+
+			return true;
+		}
+
+		return false;
+	}
+
+	getPlayingPlayers () : Player[] {
+		return this.players.filter(player => !this.isTsar(player));
+	}
+
 	isTsar (player : Player) : boolean {
 		return this.tsar === player;
 	}
 
 	// The Tsar chooses the winner of *that round* by their index (on the black card choice list). TODO: change the name of this so it's not confusing winner of round and winner of game
 	chooseTurnWinnerByIndex (tsar : Player, index : number = -1) : Info {
-		if (this.tsar !== tsar) {
+		if (!this.isTsar(tsar)) {
 			return [false, "You can't choose, you're not the Tsar."];
 		}
 
@@ -380,33 +434,37 @@ class Game extends FSM {
 
 	// If all the players have played all of their cards. TODO: add a timer to this, or somewhere in the code so there's a turn limit
 	donePlaying () : boolean {
-		for (let i = 0; i < this.players.length; i++) {
-			if (!this.isTsar(this.players[i])) {
-				if (this.players[i].played.length !== this.blackCard.getFillCount()) {
-					return false;
-				}
+		if (this.state !== "PLAYING") {
+			return false;
+		}
+
+		let players = this.getPlayingPlayers();
+		let fillCount = this.blackCard.getFillCount();
+
+		for (let i = 0; i < players.length; i++) {
+			if (this.players[i].played.length !== fillCount) {
+				return false;
 			}
 		}
 
 		return true;
 	}
 
+	getFilledInText (player : Player) : string {
+		return this.blackCard.getDisplay(true, ...player.played.map(index => player.cards[index]));
+	}
+	
 	// Gets the black cards text filled in with all the players cards (except the Tsar's)
 	getFilledInCardText () : string[] {
-		return this.players
-			.filter(player => !this.isTsar(player))
-			.map((player : Player) : string => this.blackCard.getDisplay(true, ...player.played.map(index => player.cards[index])));
+		return this.getPlayingPlayers()
+			.map((player : Player) : string => this.getFilledInText(player));
 	}
 
 	// Gets the black cards text filled in with all players cards, and the Player who had those cards. (Except the Tsar's). Sadly mostly repeat code from getFilledInCardText
 	// Couldn't put them together because typescript was being annoying
 	getFilledInCardsWithPlayer () : Array<[Player, string]> {
-		return this.players
-			.filter(player => !this.isTsar(player))
-			.map((player : Player) : [Player, string] => [
-						player, 
-						this.blackCard.getDisplay(true, ...player.played.map(index => player.cards[index]))
-					]);
+		return this.getPlayingPlayers()
+			.map((player : Player) : [Player, string] => [player, this.getFilledInText(player)]);
 	}
 
 	// A Player plays a card, gets the card reference.
@@ -450,8 +508,8 @@ class Game extends FSM {
 	}
 
 	// Kill the game into pieces
-	kill () : void {
-		this.setState("KILLED", true, true);
+	kill () : boolean {
+		return this.setState("KILLED", true, true);
 	}
 
 	// Start the game from it's waiting stage.
@@ -523,18 +581,44 @@ class Game extends FSM {
 		return [false, "I can't find that player..."];
 	}
 
+	getPlayerCount () : number {
+		return this.players.length;
+	}
+
+	hasPlayers () : boolean {
+		return this.getPlayerCount() > 0;
+	}
+
+	hasHost () : boolean {
+		return this.host !== null && this.players.includes(this.host); 
+	}
+
+	setHost (player: Player) : boolean {
+		return this.setHostByIndex(this.players.indexOf(player));
+	}
+
+	setHostByIndex (index: number) : boolean {
+		if (this.players[index] instanceof Player) {
+			this.host = this.players[index];
+
+			return true;
+		}
+
+		return false;
+	}
+
 	// Tries to acquire a host.
 	findHost () : boolean {
 		// If there is no host declared at all, or if the host is no longer in the game list.
-		if (this.host === null || !this.players.includes(this.host)) {
-			if (this.players.length === 0) {
+		if (!this.hasHost()) {
+			if (!this.hasPlayers()) {
 				// game is empty, kill it.
 				this.kill();
 
 				return false;
 			} else {
 				// Just set it to the most recent user.
-				this.host = this.players[0];
+				this.setHostByIndex(0);
 
 				return true;
 			}
@@ -559,7 +643,7 @@ class Game extends FSM {
 			indent([ // indents it so it looks nicer
 				'state: ' + this.state, // The current statename
 				'host: ' + (this.host instanceof Player ? this.host.toString(indentLevel + 1) : this.host),  // If there's a host, then display them
-				'tsar: ' + this.tsar, // Display the tsar. TODO: change this to a tsar.toString, as this.tsar is a Player
+				'tsar: ' + this.tsar.toString(indentLevel + 1), // Display the tsar. TODO: change this to a tsar.toString, as this.tsar is a Player
 				'cards: ' + this.cards.toString(indentLevel + 2)], indentLevel + 1), // The cards the game has, indents them to look nice. TODO: Check if they have any cards, if not display a message
 			"Players",
 			...(this.players.map(player => player.toString(indentLevel + 1))) // adds all the players into the list, indented nicely
@@ -588,6 +672,28 @@ class Player {
 
 		// The player's points in the game.
 		this.points = 0;
+	}
+
+	getCardIndex (card: WhiteCard) : number {
+		return this.cards.indexOf(card);
+	}
+
+	removeCard (card: WhiteCard) : boolean {
+		return this.removeCardByIndex(this.getCardIndex(card));
+	}
+
+	removeCardByIndex (index: number) : boolean {
+		if (index === -1) {
+			return false;
+		}
+
+		this.cards.splice(index, 1);
+
+		return true;
+	}
+
+	getPlayedCount () : number {
+		return this.played.length;
 	}
 
 	// Fills the players deck with cards randomly chosen from the games deck. TODO: handle cases where there is no cards, somewhere
@@ -752,7 +858,9 @@ class CardCollection {
 		let col = new CardCollection(
 			this.white
 				.map(card => card.clone()), 
-			this.black.map(card => card.clone()), this.name
+			this.black
+				.map(card => card.clone()), 
+			this.name
 		);
 
 		col.from = [...this.from]; // clone it, essentially
@@ -773,9 +881,39 @@ class CardCollection {
 		return true;
 	}
 
+	isFrom (col: CardCollection) {
+		return this.from.includes(col);
+	}
+
+	hasCard (card : (BlackCard | WhiteCard)) : boolean {
+		if (card instanceof WhiteCard) {
+			return this.hasWhiteCard(card);
+		} else if (card instanceof BlackCard) {
+			return this.hasBlackCard(card);
+		} else {
+			throw new TypeError("Can not find a card, because that isn't a card.");
+		}
+	}
+
+	getWhiteCardIndex (card: WhiteCard) : number {
+		return this.white.indexOf(card);
+	}
+
+	hasWhiteCard (card: WhiteCard) : boolean {
+		return this.getWhiteCardIndex(card) !== -1;
+	}
+
+	getBlackCardIndex (card: BlackCard) : number {
+		return this.black.indexOf(card);
+	}
+
+	hasBlackCard (card) : boolean {
+		return this.getBlackCardIndex(card) !== -1;
+	}
+
 	unmerge (col : CardCollection, force : boolean = false) : boolean { // very inefficient
-		if (!this.from.includes(col) && !force) {
-			return false; // it's not in the from.
+		if (!this.isFrom(col) && force === false) {
+			return false; // it's not from that col
 		}
 
 		let whiteFound : WhiteCard[] = [];
@@ -788,7 +926,7 @@ class CardCollection {
 			}
 		}
 
-		whiteFound.forEach(card => this.white.splice(this.white.indexOf(card), 1)); 
+		whiteFound.forEach(card => this.white.splice(this.getWhiteCardIndex(card), 1));
 
 
 		let blackFound : BlackCard[] = [];
@@ -801,13 +939,15 @@ class CardCollection {
 			}
 		}
 
-		blackFound.forEach(card => this.black.splice(this.black.indexOf(card), 1)); 
+		blackFound.forEach(card => this.black.splice(this.getBlackCardIndex(card), 1)); 
 
 		return true;
 	}
  
 	static create (data : StoredCards) : CardCollection {
 		let col = new CardCollection();
+
+		// TODO: allow there to be only one card in the black and white props
 
 		if (Array.isArray(data.black)) {
 			col.black.push(...data.black.map(text => BlackCard.create(text)));
