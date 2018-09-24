@@ -260,6 +260,10 @@ class Game extends FSM {
 
 		this.resetSettings();
 
+		this.createStates();
+	}
+
+	createStates () : void {
 		// The state for the game being killed off
 		this.addState("KILLED") // in the other fromTransform functions, no need to check for KILLED as it is forced onto the system.
 			.setToTransform("KILLED", () => this.players.length === 0) // what
