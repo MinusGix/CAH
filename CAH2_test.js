@@ -57,7 +57,7 @@ game.start();
 
 function playTurn () {
 	if (game.state === 'ENDGAME') {
-		return false;
+		return;
 	}
 
 	console.log("Black Card is: ", game.blackCard.toString());
@@ -82,7 +82,5 @@ function playTurn () {
 
 	console.log(game.players.map(player => player.id + ' ' + player.points).join(', '));
 
-	return true;
+	playTurn();
 }
-
-while(playTurn()) {}
