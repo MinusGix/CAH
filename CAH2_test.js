@@ -80,3 +80,5 @@ function playTurn () {
 
 	playTurn();
 }
+
+playTurn();
