@@ -771,32 +771,40 @@ class BlackCard {
 
 	getDisplay (fillIn : boolean = false, ...cards : WhiteCard[]) : string {
 		if (fillIn) { // Fills the number spots with the cards text
-			return this.text.map((val : (string | number)) : string => {
-				if (typeof(val) === 'number') {
-					let card : WhiteCard = cards[val];
-
-					if (val > cards.length - 1) {
-						throw new RangeError("Too few cards given to BlackCard#getDisplay");
-					}
-
-					if (card instanceof WhiteCard) {
-						return card.getDisplay();
-					} else {
-						throw new TypeError("Card given to BlackCard#getDisplay was not a White Card");
-					}
-				}
-				
-				return val;
-			}).join('');
+			return this.getFilledInDisplay(...cards);
 		} else {
-			return this.text.map((val) : string => {
-				if (typeof(val) === 'number') {
-					return '___' + String(val) + '___';
+			return this.getBlankedDisplay();
+		}
+	}
+
+	getFilledInDisplay (...cards : WhiteCard[]) : string {
+		return this.text.map((val : (string | number)) : string => {
+			if (typeof(val) === 'number') {
+				const card : WhiteCard = cards[val];
+
+				if (val > cards.length - 1) {
+					throw new RangeError("Too few cards given to BlackCard#getDisplay");
 				}
 
-				return val;
-			}).join('');
-		}
+				if (card instanceof WhiteCard) {
+					return card.getDisplay();
+				} else {
+					throw new TypeError("Card given to BlackCard#getDisplay was not a White Card");
+				}
+			}
+			
+			return val;
+		}).join('');
+	}
+
+	getBlankedDisplay () {
+		return this.text.map((val) : string => {
+			if (typeof(val) === 'number') {
+				return '___' + String(val) + '___';
+			}
+
+			return val;
+		}).join('');
 	}
 
 	static create (data : (string | number)[]) : BlackCard {
@@ -911,30 +919,43 @@ class CardCollection {
 		return this.getBlackCardIndex(card) !== -1;
 	}
 
-	unmerge (col : CardCollection, force : boolean = false) : boolean { // very inefficient
+	unmerge (col : CardCollection, force : boolean = false) : boolean { // feels very inefficient
 		if (!this.isFrom(col) && force === false) {
 			return false; // it's not from that col
 		}
 
+		this.unmergeWhite(col);
+
+		this.unmergeBlack(col);
+
+		this.from.splice(this.from.indexOf(col), 1);
+
+		return true;
+	}
+
+	unmergeWhite (col: CardCollection) : boolean {
 		let whiteFound : WhiteCard[] = [];
 
 		for (let i = 0; i < col.white.length; i++) {
 			const card = col.white[i];
 
-			if (this.white.includes(card)) {
+			if (this.hasWhiteCard(card)) {
 				whiteFound.push(card);
 			}
 		}
 
 		whiteFound.forEach(card => this.white.splice(this.getWhiteCardIndex(card), 1));
 
+		return true;
+	}
 
+	unmergeBlack (col : CardCollection) : boolean {
 		let blackFound : BlackCard[] = [];
 
 		for (let i = 0; i < col.black.length; i++) {
 			const card = col.black[i];
 
-			if (this.black.includes(card)) {
+			if (this.hasBlackCard(card)) {
 				blackFound.push(card);
 			}
 		}

@@ -22,9 +22,7 @@ let P3 = new CAH.Player('Player3');
 let game = CAH.Game.create(P1);
 game.cards.merge(col1);
 
-game.on("game:player:played-all-cards", (_, player) => {
-	console.log(player.id + " has played all their cards.");
-})
+game.on("game:player:played-all-cards", (_, player) => console.log(player.id + " has played all their cards."));
 
 game.on("game:game-winner", (_, winners) => {
 	let text = winners.map(player => player.id).join(', ');
@@ -38,9 +36,7 @@ game.on("game:game-winner", (_, winners) => {
 	console.log(text + "!");
 });
 
-game.on("game:tsar:choice", (_, choice) => {
-	console.log("The Tsar chose '" + choice[1] + "' which was played by " + choice[0].id + "! They got a point.");
-});
+game.on("game:tsar:choice", (_, choice) => console.log("The Tsar chose '" + choice[1] + "' which was played by " + choice[0].id + "! They got a point."));
 
 
 game.addPlayer(P2);
@@ -61,17 +57,17 @@ function playTurn () {
 	}
 
 	console.log("Black Card is: ", game.blackCard.toString());
-
+	
+	let blackCardInputCounts = game.blackCard.getFillCount();
 	game.players.forEach(player => {
 		if (!game.isTsar(player)) {
-			for (let i = 0; i < game.blackCard.getFillCount(); i++) {
+			for (let i = 0; i < blackCardInputCounts; i++) {
 				game.play(player, player.cards[i]);
 			}
 		} else {
 			console.log(player.id, "is tsar");
 		}
 	});
-
 
 	console.log(game.state);
 	console.log(game.getFilledInCardText());
