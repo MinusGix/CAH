@@ -328,31 +328,49 @@ class Game extends FSM {
 
 		this.minSettings = simpleCopy(InternalConfig.Game.minSettings);
 
+		this.emit("settings:reset", this); // since resetSettings is called in the constructor, it's impossible to listen for the first one.
+
 		return true;
 	}
 
 	chooseBlackCard () : boolean {
 		this.blackCard = this.cards.getRandomBlackCard(true);
 		
+		this.emit("card:black:chosen", this);
+
 		return true;
 	}
 
 	chooseTsar () : boolean {
 		this.tsar = this.players[randomIndex(this.players.length)];
 
+		this.emit("tsar:chosen", this);
+
 		return true;
 	}
 
 	fillAllPlayersCards () : boolean[] {
-		return this.players.map(player => this.fillPlayersCards(player));
+		const result = this.players.map(player => this.fillPlayersCards(player));
+		
+		this.emit("players:filled-cards", this);
+
+		return result;
 	}
 
 	fillPlayersCards (player : Player) : boolean {
-		return player.fillCards(this.settings.playerCards, this.cards);
+		const result = player.fillCards(this.settings.playerCards, this.cards);
+
+		this.emit("player:filled-cards", this, player);
+
+		return result;
 	}
 
 	removePlayersPlayedCards () : boolean[] {
-		return this.players.map(player => this.removePlayerPlayedCards(player));
+		const result = this.players.map(player => this.removePlayerPlayedCards(player));
+
+		this.emit("players:removed-played", this);
+
+		return result;
 	}
 
 	removePlayerPlayedCards (player: Player) : boolean {
@@ -361,6 +379,8 @@ class Game extends FSM {
 			player.cards = player.cards.filter(card => card !== null);
 			
 			player.played = [];
+
+			this.emit("player:removed-played", this, player);
 
 			return true;
 		}
@@ -502,6 +522,8 @@ class Game extends FSM {
 		if (this.donePlaying()) {
 			this.setState('INBETWEENTURN');
 			this.setState('TSARTURN');
+
+			this.emit("game:turn-done", this);
 		}
 
 		if (player.played.length === this.blackCard.getFillCount()) {
@@ -574,7 +596,9 @@ class Game extends FSM {
 					this.setState("WAITING");
 				}
 
-				return [true, "Removed Played"];
+				this.emit("player:removed", this, player);
+
+				return [true, "Removed Player"];
 			} else {
 				console.warn("Trying to remove player by index out of range", index);
 				return [false, "I can't find that player."];
@@ -604,6 +628,8 @@ class Game extends FSM {
 	setHostByIndex (index: number) : boolean {
 		if (this.players[index] instanceof Player) {
 			this.host = this.players[index];
+
+			this.emit("host:set", this, this.host);
 
 			return true;
 		}
