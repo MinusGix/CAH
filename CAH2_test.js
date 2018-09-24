@@ -78,7 +78,7 @@ function playTurn () {
 
 	let chosen = CAH.randomIndex(game.getFilledInCardText().length);
 
-	game.chooseTurnWinnerByIndex(game.tsar, chosen);
+	console.log("Tsar Choosing Winner:", game.chooseTurnWinnerByIndex(game.tsar, chosen));
 
 	console.log(game.players.map(player => player.id + ' ' + player.points).join(', '));
 

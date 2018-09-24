@@ -442,7 +442,7 @@ class Game extends FSM {
 		let fillCount = this.blackCard.getFillCount();
 
 		for (let i = 0; i < players.length; i++) {
-			if (this.players[i].played.length !== fillCount) {
+			if (players[i].played.length !== fillCount) {
 				return false;
 			}
 		}
