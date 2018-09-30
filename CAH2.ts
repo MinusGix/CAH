@@ -102,7 +102,7 @@ interface FSM_TriggerCallback_To extends FSM_TriggerCallback_General {} // no di
 interface FSM_TriggerCallback_Set extends FSM_TriggerCallback_General {
 	(self: FSM, stateName: string, transformName: string, lastState: string, ...args: any[]) : any;
 }
-
+	
 interface FSM_TriggerCallback_UnSet extends FSM_TriggerCallback_General {
 	(self: FSM, stateName: string, transformName: string, to: string, ...args: any[]) : any;
 }
